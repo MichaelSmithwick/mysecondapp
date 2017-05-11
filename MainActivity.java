@@ -159,7 +159,14 @@ public class MainActivity extends AppCompatActivity{
       textView.setText(current);
    }
 
+   /**
+    * This function sets up the microphone input and speaker output,
+    * and runs the recording of sound in a thread.
+    * The recorded sound is stored in a file. After the user ends the
+    * recording the file is read back and played through the speakers.
+    */
    protected void loopback(){
+      // begin setup
       android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
 
       final int bufferSize=AudioRecord.getMinBufferSize(M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
@@ -168,15 +175,26 @@ public class MainActivity extends AppCompatActivity{
 
       audioTrack.setPlaybackRate(M2A_FREQ);
       final byte[] buffer=new byte[bufferSize];
+      // end of setup
+
+      // Actual recording is enabled but no data is captured until later
       audioRecord.startRecording();
+
       Log.i(this.getString(R.string.LOG_TAG),this.getString(R.string.audioRecordStart));
       updateMessageBoard("\n");
       updateMessageBoard(this.getString(R.string.audioRecordStart));
+
+      // The audio output is enabled but no data is sent until later
       audioTrack.play();
+
       Log.i(this.getString(R.string.LOG_TAG),this.getString(R.string.audioPlayStart));
       updateMessageBoard("\n");
       updateMessageBoard(this.getString(R.string.audioPlayStart));
       updateMessageBoard("\nthreadStop="+threadStop);
+
+      // The thread that will capture, store, and replay the sound is created here
+      // The Runnable object's run() function is created here but will be called
+      // when the thread is started later on.
       Rthread=new Thread(new Runnable(){
          @Override
          public void run(){
@@ -222,6 +240,8 @@ public class MainActivity extends AppCompatActivity{
             }
          }
       });
+
+      // The thread is started here. It calls the run() function defined above.
       Rthread.start();
    }
 
