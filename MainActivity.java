@@ -166,46 +166,45 @@ public class MainActivity extends AppCompatActivity{
     * recording the file is read back and played through the speakers.
     */
    protected void loopback(){
-      // begin setup
+      // begin setup, set thread to high priority, get buffer size, create sound capture object,
+      // create sound output object, set playback rate, and create a buffer for the data
       android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
-
       final int bufferSize=AudioRecord.getMinBufferSize(M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
       final AudioRecord audioRecord=new AudioRecord(MediaRecorder.AudioSource.MIC,M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,MediaRecorder.AudioEncoder.AMR_NB,bufferSize);
       audioTrack=new AudioTrack(AudioManager.ROUTE_SPEAKER,M2A_FREQ,AudioFormat.CHANNEL_OUT_MONO,MediaRecorder.AudioEncoder.AMR_NB,bufferSize,AudioTrack.MODE_STREAM);
-
       audioTrack.setPlaybackRate(M2A_FREQ);
       final byte[] buffer=new byte[bufferSize];
       // end of setup
 
-      // Actual recording is enabled but no data is captured until later
+      // Recording and audio output are enabled here but no data is captured or output
+      // until later after the thread is started
       audioRecord.startRecording();
-
-      Log.i(this.getString(R.string.LOG_TAG),this.getString(R.string.audioRecordStart));
-      updateMessageBoard("\n");
-      updateMessageBoard(this.getString(R.string.audioRecordStart));
-
-      // The audio output is enabled but no data is sent until later
       audioTrack.play();
-
-      Log.i(this.getString(R.string.LOG_TAG),this.getString(R.string.audioPlayStart));
-      updateMessageBoard("\n");
-      updateMessageBoard(this.getString(R.string.audioPlayStart));
       updateMessageBoard("\nthreadStop="+threadStop);
 
       // The thread that will capture, store, and replay the sound is created here
       // The Runnable object's run() function is created here but will be called
       // when the thread is started later on.
       Rthread=new Thread(new Runnable(){
+         // The run function opens a data file, captures sound from the microphone
+         // and saves it to the opened file.
+         // When the user selects the 'Stop Recording' button the 'threadStop'
+         // flag is set to true and the capture loop ends.
+         // The file is flushed and closed. Then it is reopened in read mode
+         // and sent to the output speakers.
+         // The microphone, speakers, and file are all closed and the thread
+         // terminates.
          @Override
          public void run(){
+            // audio capture segment begin.
+            // note: outFileStream can always have a '0' offset since file pointer
+            // is automatically moved by the writing mechanics
             final File outFile = new File(storagePath,"record1.m2a");
             try{
                FileOutputStream outFileStream=new FileOutputStream(outFile);
                while(!threadStop){
                   try{
                      audioRecord.read(buffer,0,bufferSize);
-                     //audioTrack.write(buffer,0,bufferSize);
-                     /** @note the stream will always append data so offset is always 0 */
                      outFileStream.write(buffer,0,bufferSize);
                   }catch(Throwable T){
                      Log.e(LOG_TAG,"Read/Write Failed");
@@ -219,12 +218,15 @@ public class MainActivity extends AppCompatActivity{
                }catch(IOException e){
                   e.printStackTrace();
                }
+               // end audio capture segment
 
+               // start audio playback segment
+               // note: no offset needs to be used in the inFileStream, the file pointer is
+               // incremented automatically as the data is read
                FileInputStream inFileStream=new FileInputStream(outFile);
                int bytesRead=0;
                while(bytesRead>-1){
                   try{
-                     /** @note stream will automatically move read pointer so offset can always be 0 */
                      bytesRead=inFileStream.read(buffer,0,bufferSize);
                      audioTrack.write(buffer,0,bufferSize);
                   }catch(IOException e){
@@ -234,8 +236,10 @@ public class MainActivity extends AppCompatActivity{
                audioTrack.flush();
                audioTrack.stop();
                audioTrack.release();
+               // end audio playback segment
+
             }catch(FileNotFoundException e){
-               Log.e("com.meinc.Error","Unable to open output file");
+               Log.e(LOG_TAG,"Unable to open output file");
                e.printStackTrace();
             }
          }
@@ -245,6 +249,12 @@ public class MainActivity extends AppCompatActivity{
       Rthread.start();
    }
 
+   /**
+    * This function is called when the user selects 'Stop Recording'
+    * This function sets the 'threadStop' flag to true, interrupting the
+    * recording loop in the loopback thread
+    * @param view
+    */
    protected void stopRecord(View view){
       updateMessageBoard("\nthreadStop="+threadStop+"\nstopRecord called");
       threadStop=true;
