@@ -18,6 +18,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.TextView;
 
 import java.io.File;
@@ -36,6 +37,7 @@ import java.util.List;
 public class MainActivity extends AppCompatActivity{
    private static final String LOG_TAG="com.meinc.mysecondapp";
    private static final int M2A_FREQ=44100;
+   private boolean playBackGuard=false;
 
    private int counter;
    private Thread Rthread;
@@ -94,7 +96,7 @@ public class MainActivity extends AppCompatActivity{
     *    The path to the app data
     * @param textView The TextView to send the data to
     */
-   private void showInfo(TextView textView){
+   public void showInfo(TextView textView){
       counter++;
       String infoString=counter+"\n"+this.getText(R.string.hello_world)+"\n";
       textView.setText(infoString);
@@ -141,9 +143,13 @@ public class MainActivity extends AppCompatActivity{
 
    /**
     * This function is called when the Record Sound button is pushed
+    * threadStop must be set to false to permit the recording of sound until
+    * the 'Stop Recording' button is pushed. The Stop Recording button handler
+    * 'stopRecord()' will set 'threadStop' true to stop the recording process
+    * and close the recording thread.
     * @param view
     */
-   protected void startRecord(View view){
+   public void startRecord(View view){
       threadStop=false;
       loopback();
    }
@@ -152,9 +158,9 @@ public class MainActivity extends AppCompatActivity{
     * Add the string to the UI. The string is appended to the current displayed data.
     * @param addString string to add to the current UI
     */
-   private void updateMessageBoard(String addString){
-      TextView textView=(TextView)findViewById(R.id.informationBox);
-      String current=(String)textView.getText();
+   public void updateMessageBoard(String addString){
+      EditText textView=(EditText)findViewById(R.id.informationBox);
+      String current=textView.getText().toString();
       current+=addString;
       textView.setText(current);
    }
@@ -166,42 +172,60 @@ public class MainActivity extends AppCompatActivity{
     * recording the file is read back and played through the speakers.
     */
    protected void loopback(){
-      // begin setup, set thread to high priority, get buffer size, create sound capture object,
-      // create sound output object, set playback rate, and create a buffer for the data
       android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
-      final int bufferSize=AudioRecord.getMinBufferSize(M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
-      final AudioRecord audioRecord=new AudioRecord(MediaRecorder.AudioSource.MIC,M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,MediaRecorder.AudioEncoder.AMR_NB,bufferSize);
-      audioTrack=new AudioTrack(AudioManager.ROUTE_SPEAKER,M2A_FREQ,AudioFormat.CHANNEL_OUT_MONO,MediaRecorder.AudioEncoder.AMR_NB,bufferSize,AudioTrack.MODE_STREAM);
-      audioTrack.setPlaybackRate(M2A_FREQ);
-      final byte[] buffer=new byte[bufferSize];
-      // end of setup
-
-      // Recording and audio output are enabled here but no data is captured or output
-      // until later after the thread is started
-      audioRecord.startRecording();
-      audioTrack.play();
-      updateMessageBoard("\nthreadStop="+threadStop);
-
       // The thread that will capture, store, and replay the sound is created here
       // The Runnable object's run() function is created here but will be called
       // when the thread is started later on.
       Rthread=new Thread(new Runnable(){
+         @Override
+         public void run(){
+            record();
+            while(!threadStop);
+            playBack();
+         }
+      });
+      // The thread is started here. It calls the run() function defined above.
+      Rthread.start();
+   }
+
+   /**
+    * This function is called when the user selects 'Stop Recording'
+    * This function sets the 'threadStop' flag to true, interrupting the
+    * recording loop in the loopback thread
+    * @param view
+    */
+   public void stopRecord(View view){
+      updateMessageBoard("\nthreadStop="+threadStop+"\nstopRecord called");
+      threadStop=true;
+   }
+
+   /**
+    * Playback the previously selected recording
+    * @param view
+    */
+   public void playBackRecording(View view){
+      playBack();
+   }
+
+   /**
+    * Record to a file previously selected by the user
+    */
+   public void record(){
+      android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
+      final int bufferSize=AudioRecord.getMinBufferSize(M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
+      final AudioRecord audioRecord=new AudioRecord(MediaRecorder.AudioSource.MIC,M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,MediaRecorder.AudioEncoder.AMR_NB,bufferSize);
+      final byte[] buffer=new byte[bufferSize];
+      Thread rThread=new Thread(new Runnable(){
          // The run function opens a data file, captures sound from the microphone
          // and saves it to the opened file.
          // When the user selects the 'Stop Recording' button the 'threadStop'
          // flag is set to true and the capture loop ends.
-         // The file is flushed and closed. Then it is reopened in read mode
-         // and sent to the output speakers.
-         // The microphone, speakers, and file are all closed and the thread
-         // terminates.
-         @Override
+         // The file is flushed and closed.
          public void run(){
-            // audio capture segment begin.
-            // note: outFileStream can always have a '0' offset since file pointer
-            // is automatically moved by the writing mechanics
             final File outFile = new File(storagePath,"record1.m2a");
             try{
                FileOutputStream outFileStream=new FileOutputStream(outFile);
+               // threadStop is set by stopRecord() function
                while(!threadStop){
                   try{
                      audioRecord.read(buffer,0,bufferSize);
@@ -219,10 +243,34 @@ public class MainActivity extends AppCompatActivity{
                   e.printStackTrace();
                }
                // end audio capture segment
+            }catch(FileNotFoundException e){
+               Log.e(LOG_TAG,"Unable to open output file");
+               e.printStackTrace();
+            }
+         }
+      });
 
-               // start audio playback segment
-               // note: no offset needs to be used in the inFileStream, the file pointer is
-               // incremented automatically as the data is read
+      rThread.start();
+  }
+
+   /**
+    * Playback the file that has been previously selected by the user
+    */
+   public void playBack(){
+      if(playBackGuard) return;
+      playBackGuard=true;
+      final int bufferSize=1024;
+      android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
+      audioTrack=new AudioTrack(AudioManager.ROUTE_SPEAKER,M2A_FREQ,AudioFormat.CHANNEL_OUT_MONO,MediaRecorder.AudioEncoder.AMR_NB,bufferSize,AudioTrack.MODE_STREAM);
+      audioTrack.setPlaybackRate(M2A_FREQ);
+      final byte[] buffer=new byte[bufferSize];
+      audioTrack.play();
+
+      Thread pThread=new Thread(new Runnable(){
+         @Override
+         public void run(){
+            final File outFile = new File(storagePath,"record1.m2a");
+            try{
                FileInputStream inFileStream=new FileInputStream(outFile);
                int bytesRead=0;
                while(bytesRead>-1){
@@ -236,28 +284,14 @@ public class MainActivity extends AppCompatActivity{
                audioTrack.flush();
                audioTrack.stop();
                audioTrack.release();
-               // end audio playback segment
-
             }catch(FileNotFoundException e){
-               Log.e(LOG_TAG,"Unable to open output file");
+               Log.e(LOG_TAG,"File Not Found");
                e.printStackTrace();
             }
+            playBackGuard=false;
          }
       });
 
-      // The thread is started here. It calls the run() function defined above.
-      Rthread.start();
-   }
-
-   /**
-    * This function is called when the user selects 'Stop Recording'
-    * This function sets the 'threadStop' flag to true, interrupting the
-    * recording loop in the loopback thread
-    * @param view
-    */
-   protected void stopRecord(View view){
-      updateMessageBoard("\nthreadStop="+threadStop+"\nstopRecord called");
-      threadStop=true;
+      pThread.start();
    }
 }
-
