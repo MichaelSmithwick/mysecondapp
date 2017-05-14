@@ -1,6 +1,7 @@
 package com.meinc.mysecondapp;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioManager;
@@ -29,9 +30,13 @@ import java.io.IOException;
  */
 public class MainActivity extends AppCompatActivity{
    private static final String LOG_TAG="com.meinc.mysecondapp";
+   public static final String CURRENT_FN_KEY="com.meinc.mysecondapp.CURRENTFN";
+   public static final String APP_STORAGE_KEY="comm.meinc.mysecondapp.APPSTORAGE";
+   public static final int GETFILENAME=1001;
    private static final int M2A_FREQ=44100;
    private static final String APP_STORAGE="dogWhistle";
    private static final String DEFAULT_FN="record1.m2a";
+   private String CURRENT_FN=DEFAULT_FN;
 
    private boolean playBackGuard=false; /** permits only single access to playback mechanism */
    private int counter=0; /** Counts how many times the 'Check Permissions' button has been pushed */
@@ -98,6 +103,28 @@ public class MainActivity extends AppCompatActivity{
       infoString+="\nExternal Media Available="+isExternalStorageWriteable();
       infoString+="\n"+storagePath.getAbsolutePath();
       textView.setText(infoString);
+      updateMessageBoard("\n"+CURRENT_FN);
+   }
+
+   public void selectActiveFile(View view){
+      Intent intent=new Intent(this,FileSelect.class);
+      intent.putExtra(CURRENT_FN_KEY,CURRENT_FN);
+      intent.putExtra(APP_STORAGE_KEY,APP_STORAGE);
+      startActivityForResult(intent,GETFILENAME);
+   }
+
+   @Override
+   protected void onActivityResult(int requestCode,int resultCode,Intent intent){
+      super.onActivityResult(requestCode,resultCode,intent);
+      if(requestCode==GETFILENAME){
+         if(resultCode==RESULT_OK){
+            CURRENT_FN=intent.getStringExtra(CURRENT_FN_KEY);
+         }
+         if(resultCode==RESULT_CANCELED){
+
+         }
+         updateMessageBoard("\n"+CURRENT_FN);
+      }
    }
 
    /**
@@ -160,8 +187,8 @@ public class MainActivity extends AppCompatActivity{
       Thread Rthread=new Thread(new Runnable(){
          @Override
          public void run(){
-            xRecord(DEFAULT_FN);
-            xPlayBack(DEFAULT_FN,3*1024);
+            xRecord(CURRENT_FN);
+            xPlayBack(CURRENT_FN,3*1024);
          }
       });
       Rthread.start();
@@ -257,7 +284,7 @@ public class MainActivity extends AppCompatActivity{
       android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
       Thread pbThread=new Thread(new Runnable(){
          public void run(){
-            xPlayBack(DEFAULT_FN,3*1024);
+            xPlayBack(CURRENT_FN,3*1024);
          }
       });
       pbThread.start();
