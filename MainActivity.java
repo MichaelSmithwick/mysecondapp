@@ -29,7 +29,7 @@ import java.io.IOException;
  * compiler.
  */
 public class MainActivity extends AppCompatActivity{
-   private static final String LOG_TAG="com.meinc.mysecondapp";
+   public static final String LOG_TAG="com.meinc.mysecondapp";
    public static final String CURRENT_FN_KEY="com.meinc.mysecondapp.CURRENTFN";
    public static final String APP_STORAGE_KEY="comm.meinc.mysecondapp.APPSTORAGE";
    public static final int GETFILENAME=1001;
@@ -106,13 +106,28 @@ public class MainActivity extends AppCompatActivity{
       updateMessageBoard("\n"+CURRENT_FN);
    }
 
+   /**
+    * Called when the user 'Set/Select Recording' button
+    * This activity uses the GETFILENAME code for return values
+    * @param view
+    */
    public void selectActiveFile(View view){
-      Intent intent=new Intent(this,FileSelect.class);
-      intent.putExtra(CURRENT_FN_KEY,CURRENT_FN);
-      intent.putExtra(APP_STORAGE_KEY,APP_STORAGE);
-      startActivityForResult(intent,GETFILENAME);
+      if(isExternalStorageWriteable()){
+         Intent intent=new Intent(this,FileSelect.class);
+         intent.putExtra(CURRENT_FN_KEY,CURRENT_FN);
+         intent.putExtra(APP_STORAGE_KEY,APP_STORAGE);
+         startActivityForResult(intent,GETFILENAME);
+      }
    }
 
+   /**
+    * Called on return from the file selection activity
+    * If RESULT_CANCELED is returned do nothing.
+    * If RESULT_OK is returned set the current filename to the returned filename
+    * @param requestCode This will be the number sent to the activity to identify it
+    * @param resultCode The result of the operation, RESULT_OK or RESULT_CANCELED
+    * @param intent The intent holding the returned filename
+    */
    @Override
    protected void onActivityResult(int requestCode,int resultCode,Intent intent){
       super.onActivityResult(requestCode,resultCode,intent);
@@ -121,7 +136,7 @@ public class MainActivity extends AppCompatActivity{
             CURRENT_FN=intent.getStringExtra(CURRENT_FN_KEY);
          }
          if(resultCode==RESULT_CANCELED){
-
+            // do nothing
          }
          updateMessageBoard("\n"+CURRENT_FN);
       }
