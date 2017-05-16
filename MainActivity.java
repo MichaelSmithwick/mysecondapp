@@ -10,6 +10,7 @@ import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.os.Environment;
 import android.support.v4.content.ContextCompat;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
@@ -29,12 +30,16 @@ import java.io.IOException;
  * compiler.
  */
 public class MainActivity extends AppCompatActivity{
+   public static final int ERROR_NONE=0;
+   public static final int ERROR_AUDIO_PERM=1001;
+   public static final int ERROR_FILE_PERM=1002;
+   public static final int ERROR_FILE_READ=1003;
    public static final String LOG_TAG="com.meinc.mysecondapp";
    public static final String CURRENT_FN_KEY="com.meinc.mysecondapp.CURRENTFN";
    public static final String APP_STORAGE_KEY="comm.meinc.mysecondapp.APPSTORAGE";
    public static final int GETFILENAME=1001;
    private static final int M2A_FREQ=44100;
-   private static final String APP_STORAGE="dogWhistle";
+   public static final String APP_STORAGE="dogWhistle";
    private static final String DEFAULT_FN="record1.m2a";
    private String CURRENT_FN=DEFAULT_FN;
 
@@ -42,6 +47,9 @@ public class MainActivity extends AppCompatActivity{
    private int counter=0; /** Counts how many times the 'Check Permissions' button has been pushed */
    private boolean threadStop=false; /** Stops the sound input loop */
    private File storagePath=null; /** Holds the storage path for the application */
+
+   public String errorMessage="";
+   public int errorNumber=ERROR_NONE;
 
    /**
     * Sets up initial UI
@@ -187,8 +195,11 @@ public class MainActivity extends AppCompatActivity{
     * @param view
     */
    public void startRecord(View view){
+      errorClear();
       threadStop=false;
       loopback();
+      Log.e(LOG_TAG,"Calling errorDialog()1:errNumber["+errorNumber+"],errorMessage["+errorMessage+"]");
+      errorDialog();
    }
 
    /**
@@ -217,7 +228,15 @@ public class MainActivity extends AppCompatActivity{
    private void xRecord(String filename){
       final int bufferSize=AudioRecord.getMinBufferSize(M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,AudioFormat.ENCODING_PCM_16BIT);
       final AudioRecord audioRecord=new AudioRecord(MediaRecorder.AudioSource.MIC,M2A_FREQ,AudioFormat.CHANNEL_IN_MONO,MediaRecorder.AudioEncoder.AMR_NB,bufferSize);
-      audioRecord.startRecording();
+      try{
+         audioRecord.startRecording();
+      }catch(Exception e){
+         e.getStackTrace();
+         errorNumber=ERROR_AUDIO_PERM;
+         errorMessage=e.getMessage();
+         Log.e(LOG_TAG,e.getMessage());
+         return;
+      }
       final File outFile = new File(storagePath,filename);
       try{
          final byte[] buffer=new byte[bufferSize];
@@ -274,8 +293,10 @@ public class MainActivity extends AppCompatActivity{
          audioTrack.stop();
          audioTrack.release();
       }catch(FileNotFoundException e){
-         Log.e("com.meinc.Error","Unable to open input file");
+         Log.e(LOG_TAG,"Unable to open input file");
          e.printStackTrace();
+         errorMessage=e.getMessage();
+         errorNumber=ERROR_FILE_READ;
       }
       playBackGuard=false;
    }
@@ -296,6 +317,7 @@ public class MainActivity extends AppCompatActivity{
     * @param view
     */
    public void playBackRecording(View view){
+      errorClear();
       android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
       Thread pbThread=new Thread(new Runnable(){
          public void run(){
@@ -303,6 +325,42 @@ public class MainActivity extends AppCompatActivity{
          }
       });
       pbThread.start();
+      Log.e(LOG_TAG,"Calling errorDialog()2:errNumber["+errorNumber+"],errorMessage["+errorMessage+"]");
+      errorDialog();
    }
 
+   public void errorClear(){
+      errorMessage="";
+      errorNumber=ERROR_NONE;
+   }
+
+   public void errorDialog(){
+      Log.e(LOG_TAG,"Calling errorDialog():errNumber["+errorNumber+"],errorMessage["+errorMessage+"]");
+      String message="";
+      String title="";
+
+      switch(errorNumber){
+         case ERROR_NONE:
+            return;
+         case ERROR_FILE_PERM:
+            title="Permission Violation";
+            message="FILE PERMISSION\nPermissions Not Set\nTurn on File System access\n--\n"+errorMessage;
+            break;
+         case ERROR_FILE_READ:
+            title="File Read Error";
+            message="Unable to read file\nPossible Permission Problem\nOr file doesn't exist\n--\n"+errorMessage;
+            break;
+         case ERROR_AUDIO_PERM:
+            title="Permission Violation";
+            message="RECORD AUDIO\nPermissions Not Set\nTurn on Audio for this App\n--\n"+errorMessage;
+            break;
+         default:
+            break;
+      }
+      new AlertDialog.Builder(this)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton("Ok",null)
+            .show();
+   }
 }
